@@ -1,0 +1,1298 @@
+\section{Khuur мобайл апп}
+
+Дадлагын хугацаанд Flutter, Fast Fourier Transform (FFT) болон PlayStore судалж шаардлагын дагуу тухайн гар утасны аппликейшнийг гүйцэтгэж амжиллтай бүтээгдэхүүн болгон PlayStore дээр байршуулав. (\href{https://play.google.com/store/apps/details?id=com.khuur.v2_khuur_app}{Khuur апп PlayStore})
+
+Сурах ур чадвар: 
+\begin{itemize}
+    \item Git болон GitHub-ийг хэрхэн зөв ашиглах, мэдэлэгээ тэлэх
+    \item Мобайл аппликейшн боловсруулах үйл явц, арга зүйн талаархи ойлголттой болох
+    \item Доод төвшинд алгоритм бичиж сурах
+    \item Цэвэрхэн цэгцтэй код бичиж сурах
+    \item Dart plugin бичиж сурах
+    \item Асуудал гарж ирэхэд түүнийгээ зөв түлхүүр үгсээр хайн шийдлийг олох
+\end{itemize}
+
+Системийн шаардлага: 
+\begin{itemize}
+    \item Flutter ашигласан байх
+    \item Responsive байх
+    \item FFT алгоритм ашиглаж дууны давтамжийг олох
+    \item 60FPS хурдтай байх
+    \item Программын хурд сайн байх, гацалтгүй, утас халахгүй байх
+\end{itemize}
+
+\subsection{Flutter ашиглаж нүүр хэсгийг зурах}
+Khuur аппликейшний хамгийн гол харагдах хэсэг болох нүүр хуудсыг зурах юм. Үүний тулд Figma дээрх гаргасан загварын дагуу Flutter фреймворк ашиглан зурна. Загварын дагуу морин хуурны 3D моделийг авч Blender-ийн тусламжтайгаар тохирсон хэсгийг гэрэлтүүлэх болон камерийг тааруулах байдлаар зураг болгон гарган авсан. Энэ зургаа ашиглан нүүр хуудсын хөгжүүлэлт хийхэд бэлэн боллоо.
+\begin{lstlisting}[language=Dart, caption=Нүүр хуудсыг агуулагч виджет-ийн хэрэгжүүлэлт, frame=single]
+
+class MainScreen extends StatefulWidget {
+  const MainScreen({super.key});
+
+  @override
+  State<MainScreen> createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen>
+    with SingleTickerProviderStateMixin {
+  int currentIndex = 1;
+  late TabController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TabController(initialIndex: 1, length: 3, vsync: this);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Styles.whiteColor,
+      body: Column(
+        children: [
+          SizedBox(height: MediaQuery.of(context).viewPadding.top),
+          Expanded(
+            child: TabBarView(
+              controller: _controller,
+              physics: const NeverScrollableScrollPhysics(),
+              children: const <Widget>[
+                ComingSoonScreen(),
+                HomeScreen(),
+                ComingSoonScreen(),
+              ],
+            ),
+          ),
+          BottomNavigationHome(
+            currentIndex: _controller.index,
+            setIndex: (index) {
+              setState(() {
+                _controller.index = index;
+              });
+            },
+          )
+        ],
+      ),
+    );
+  }
+}
+
+\end{lstlisting}
+\begin{lstlisting}[language=Dart, caption=Нүүр хуудсын зуралт ба хэрэгжүүлэлт, frame=single]
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+ // энэ хэсгийг ойлгомжтой байх үүднээс хасав
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(top: fontSize(context, 5)),
+      child: Column(
+        children: [
+          const HomeHeader(),
+          const SizedBox(height: 30),
+          subHeaderWidget(),
+          Expanded(
+            child: Stack(
+              children: [
+                Padding(
+                  padding:
+                      EdgeInsets.symmetric(horizontal: fontSize(context, 2)),
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            faNoteWidget(),
+                            khuurWidget(),
+                            ciNoteWidget(),
+                          ],
+                        ),
+                      ),
+                      SizedBox(
+                        height: fontSize(context, 10),
+                      ),
+                    ],
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: TuneGauge(
+                    // frequency: freq,
+                    nearestDistance: nearestDistance,
+                    nearestNote: nearestNote,
+                  ),
+                ),
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget subHeaderWidget() {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: fontSize(context, 3)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          ChooseFrequency(
+            chosenFrequency: chosenFrequencyBox,
+            changeFrequency: changeFrequency,
+          ),
+          const SizedBox(),
+          AutoModeSwitch(
+            value: _autoMode,
+            onChange: (bool value) {
+              setState(() {
+                _autoMode = value;
+              });
+            },
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget faNoteWidget() {
+    return InkWell(
+      onTap: () {
+        setState(() {
+          targetNote = _notes.last;
+          _autoMode = false;
+        });
+      },
+      child: NoteWidget(
+        note: _notes.last,
+        targetNote: targetNote,
+        noteBorderColor: noteBorderColor,
+      ),
+    );
+  }
+
+  Widget ciNoteWidget() {
+    return InkWell(
+      onTap: () {
+        setState(() {
+          targetNote = _notes.first;
+          _autoMode = false;
+        });
+      },
+      child: NoteWidget(
+        note: _notes.first,
+        targetNote: targetNote,
+        noteBorderColor: noteBorderColor,
+      ),
+    );
+  }
+
+  Widget khuurWidget() {
+    return Expanded(
+      child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+        return Stack(
+          alignment: AlignmentDirectional.center,
+          children: isTuneCorrect
+              ? [
+                  Container(
+                    height: 400,
+                    width: 200,
+                    decoration: const BoxDecoration(
+                      // color: Colors.blue,
+                      image: DecorationImage(
+                        image: AssetImage(AssetPaths.khuur),
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                  if (targetNote != null &&
+                      targetNote!.target == _notes.first.target)
+                    roundArrow("right",
+                        width: constraints.maxWidth * 0.1,
+                        height: constraints.maxHeight * 0.1),
+                  if (targetNote != null &&
+                      targetNote!.target == _notes.last.target)
+                    roundArrow("left",
+                        width: constraints.maxWidth * 0.1,
+                        height: constraints.maxHeight * 0.1),
+                ]
+              : [
+                  if (targetNote != null &&
+                      targetNote!.target == _notes.first.target)
+                    roundArrow("right",
+                        width: constraints.maxWidth * 0.1,
+                        height: constraints.maxHeight * 0.1),
+                  Container(
+                    height: 420,
+                    width: 200,
+                    decoration: const BoxDecoration(
+                      // color: Colors.blue,
+                      image: DecorationImage(
+                        image: AssetImage(AssetPaths.khuur),
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                  if (targetNote != null &&
+                      targetNote!.target == _notes.last.target)
+                    roundArrow("left",
+                        width: constraints.maxWidth * 0.1,
+                        height: constraints.maxHeight * 0.1),
+                ],
+        );
+      }),
+    );
+  }
+
+  Widget tunedWidget() {
+    return Container(
+      height: fontSize(context, 6),
+      width: fontSize(context, 6),
+      decoration:
+          const BoxDecoration(color: Styles.whiteColor, shape: BoxShape.circle),
+      child: Icon(
+        Icons.check_circle_rounded,
+        size: fontSize(context, 5.8),
+        color: CupertinoColors.systemGreen,
+      ),
+    );
+  }
+
+  Widget arrow(bool isRight, {double? width, double? height}) {
+    return Transform(
+      alignment: Alignment.center,
+      transform: Matrix4.rotationY(roundArrowDirection == "down" ? 0 : pi),
+      child: Transform.rotate(
+        angle: isRight
+            ? (roundArrowDirection == "down" ? 1 : pi * 1.4)
+            : (roundArrowDirection == "down" ? pi * 1.2 : 0),
+        child: SvgPicture.asset(
+          AssetPaths.roundArrow,
+          color: roundArrowColor ?? CupertinoColors.systemGreen,
+          width: width! * 2.5,
+        ),
+      ),
+    );
+  }
+
+  Widget roundArrow(String? side, {double? width, double? height}) {
+    bool isRight = side == "right";
+    return Positioned(
+      top: isRight ? fontSize(context, 12.5) : fontSize(context, 11),
+      left: !isRight ? fontSize(context, 5) : fontSize(context, 10),
+      right: isRight ? 0 : null,
+      child: roundArrowDirection == null
+          ? const SizedBox()
+          : (isTuneCorrect
+              ? tunedWidget()
+              : arrow(isRight, width: 25, height: 25)),
+    );
+  }
+}
+
+\end{lstlisting}
+\pagebreak
+
+\subsection{Нүүр хуудас дахь логикийн хэрэгжүүлэлт}
+
+Нүүр хуудсаа зурсны дараагаар бид ажилдаг болгохын тулд логик үйлдэл буюу функцууд нэмэх хэрэгтэй. Үүний тулд бид өөрсдийн хөгжүүлсэн FFT алгоритмын plugin-г ашиглана. Хуурын хувьд си болон фа ноотыг \emph{targetNote} хувьсагчаар илэрхийлж байна. Мөн 440 болон 442 гэсэн 2 давтамжийн тохируулгад тааруулж си болон фа ноотын давтамж өөрчлөгдөх логик, микрофон асааж унтраах болон FFT алгоритмын хэрэгжүүлэлтийг хийв. Мөн утас крашлахаас сэргийлж алдааны хөгжүүлэлтийг мөн хэрэгжүүлэв.
+
+\begin{lstlisting}[language=Dart, caption=Нүүр хуудас дахь логикийн хэрэгжүүлэлт, frame=single]
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  static bool _isMicOn = false;
+  static bool _isHomeScreen = false;
+  bool _autoMode = true;
+
+  int? chosenFrequencyBox = NoteFrequency.frequency_440;
+  double? chosenFrequency;
+  String chosenNote = "Unknown";
+  NoteModel? targetNote;
+  NoteModel? nearestNote;
+  double nearestDistance = 0;
+  bool isTuneCorrect = false;
+  final double _amplitudeThreshold = 0.1;
+
+  late NoteList noteList;
+
+  // ci and fa notes
+  final List<NoteModel> _notes = [
+    NoteModel(
+      index: 0,
+      noteCode: "Ci",
+      noteName: "Си",
+      target: NoteFrequency.ci_442,
+      additionalText: " ♭ 3",
+    ),
+    NoteModel(
+      index: 1,
+      noteCode: "Fa",
+      noteName: "Фа",
+      target: NoteFrequency.fa_442,
+      additionalText: " 3",
+    ),
+  ];
+
+  double? noteWidth;
+  Color? noteBorderColor;
+
+  String? roundArrowDirection;
+  Color? roundArrowColor;
+
+  CancelableOperation? _pitchUpdateOperation;
+
+  @override
+  void initState() {
+    super.initState();
+    initAll();
+  }
+
+  void initAll() {
+    WidgetsBinding.instance.addObserver(this);
+
+    _isHomeScreen = true;
+
+    noteList = NoteList();
+    targetNote = _notes.first;
+
+    if (!_isMicOn) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _activateMicrophone();
+        _updatePitch();
+      });
+    } else {
+      _updatePitch();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    cacheImages();
+    super.didChangeDependencies();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    switch (state) {
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+        paused();
+        break;
+      case AppLifecycleState.resumed:
+        _isHomeScreen = true;
+        _activateMicrophone();
+        _updatePitch();
+        break;
+      default:
+        break;
+    }
+  }
+
+  void paused() {
+    disposeAll();
+  }
+
+  void resumed() {
+    initAll();
+  }
+
+  void disposeAll() {
+    _isHomeScreen = false;
+    _deactivateMicrophone();
+    _pitchUpdateOperation?.cancel();
+  }
+
+  @override
+  void dispose() {
+    disposeAll();
+    super.dispose();
+  }
+
+  Future<void> _activateMicrophone() async {
+    if (_isMicOn) return;
+    _isMicOn = true;
+    await JeefoPitchDetector.activate();
+  }
+
+  Future<void> _deactivateMicrophone() async {
+    if (!_isMicOn) return;
+    _isMicOn = false;
+    await JeefoPitchDetector.deactivate();
+  }
+
+  void cacheImages() {
+    precacheImage(const AssetImage(AssetPaths.khuur), context);
+    precacheImage(const AssetImage(AssetPaths.needle), context);
+    precacheImage(const AssetImage(AssetPaths.gaugeEllipse), context);
+    precacheImage(const AssetImage(AssetPaths.diamondGaugeEllipse), context);
+  }
+
+  int N = 1;
+  List<double> pitches = [];
+
+  Future<void> _updatePitch() async {
+    // Одоогийн дэлгэц дээр байхгүй бол дуудах шаардлагагүй
+    if (!_isHomeScreen) return;
+
+    List<double> values =
+        await JeefoPitchDetector.getValues(_amplitudeThreshold);
+    double pitch = values[0];
+    double amplitude = values[1];
+
+    if (pitch > 0) {
+      pitches.add(pitch);
+      if (pitches.length > N) pitches.removeAt(0);
+
+      chosenFrequency = Utils.calculateAverage(pitches);
+      print('$chosenFrequency ${pitches.length}');
+      chosenNote = JeefoPitchDetector.pitchToNoteName(chosenFrequency!);
+
+      calculateNearestDist(pitch, chosenNote);
+    } else {
+      Future.delayed(const Duration(milliseconds: 500))
+          .then((_) => _updatePitch());
+    }
+  }
+
+  void findNearestNote(Map<String, double> notelist, String note) {
+    notelist.forEach((key, value) {
+      if (key.contains(note)) {
+        nearestNote = NoteModel(
+          noteCode: key,
+          noteName: key,
+          target: double.tryParse(value.toString()),
+        );
+        return;
+      }
+    });
+  }
+
+  double? freq;
+
+  void calculateNearestDist(double frequency, String note) {
+    // find the nearest note and assign it to nearestNote
+    chosenFrequencyBox == NoteFrequency.frequency_440
+        ? findNearestNote(noteList.notes_440, note)
+        : findNearestNote(noteList.notes_442, note);
+
+    if (_autoMode) {
+      if (nearestNote!.target! > (221 - 5)) {
+        targetNote = _notes.first;
+      } else if (nearestNote!.target! < (208 - 5)) {
+        targetNote = _notes.last;
+      } else {
+        targetNote = null;
+      }
+    }
+
+    nearestDistance =
+        nearestNote == null ? 0 : frequency - nearestNote!.target!;
+
+    setNoteWidgetProperties(frequency);
+  }
+
+  setNoteWidgetProperties(double? frequency) async {
+    if (!mounted) return;
+    freq = frequency;
+
+    if (targetNote != null && frequency != null) {
+      double dist = targetNote!.target! - frequency;
+      print('distance $dist');
+      double tolerance = 0.3;
+      if (dist >= -tolerance && dist <= tolerance) {
+        // noteWidth = getWidth(context, 10);
+        noteBorderColor = CupertinoColors.systemGreen;
+        roundArrowColor = CupertinoColors.systemGreen;
+      } else if (dist >= -3 && dist <= 3) {
+        noteWidth = null;
+        noteBorderColor = CupertinoColors.systemYellow;
+        roundArrowColor = CupertinoColors.systemYellow;
+      } else {
+        noteWidth = null;
+        noteBorderColor = CupertinoColors.destructiveRed;
+        roundArrowColor = CupertinoColors.destructiveRed;
+      }
+      if (dist >= -0.1 && dist <= 0.1) {
+        roundArrowDirection == null;
+      } else if (dist.isNegative) {
+        roundArrowDirection = "up";
+      } else {
+        roundArrowDirection = "down";
+      }
+
+      setState(() {
+        isTuneCorrect = roundArrowColor == CupertinoColors.systemGreen;
+      });
+    } else {
+      noteWidth = null;
+      noteBorderColor = null;
+    }
+    await updateScreenBasedOnAccuracy();
+  }
+
+  Future updateScreenBasedOnAccuracy() async {
+    _pitchUpdateOperation?.cancel();
+    _pitchUpdateOperation = CancelableOperation.fromFuture(
+      Future.delayed(
+        roundArrowColor == CupertinoColors.systemGreen
+            ? const Duration(milliseconds: 300)
+            : const Duration(milliseconds: 100),
+      )
+          .then((_) => {if (mounted) _updatePitch()})
+          .then((_) => {if (mounted) setState(() {})}),
+    );
+
+    await _pitchUpdateOperation!.value;
+  }
+
+  void changeFrequency(int frequency) {
+    if (chosenFrequencyBox == frequency) return;
+    setState(() {
+      chosenFrequencyBox = frequency;
+    });
+    changeFaAndCiFrequency(frequency);
+  }
+
+  void changeFaAndCiFrequency(int frequency) {
+    _notes.first.target = frequency == NoteFrequency.frequency_440
+        ? NoteFrequency.ci_440
+        : NoteFrequency.ci_442;
+
+    _notes.last.target = frequency == NoteFrequency.frequency_440
+        ? NoteFrequency.fa_440
+        : NoteFrequency.fa_442;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // ойлгомжтой байх үүднээс хасав
+}
+
+\end{lstlisting}
+
+\subsection{FFТ алгоритмийн Dart Plugin хэрэгжүүлэлт}
+
+Flutter-ын хувьд дуу авианы давтамжийг олдог найдвартай сан хэрэгжүүлэгдээгүйг мэдээд ажлын ахтайгаа хамтраад plugin хөгжүүлэхээр болсон. Уг plugin-ы гол алгоритм нь Fast Fourier Transform (FFT) алгоритм байна. Үүнийг C программчлалын хэл дээр хөгжүүлж Dart хэлний plugin болгосон болно. Dart plugin хөгжүүлэх процессд дунд Java болон Objective-C хэлүүд дээр хөгжүүлэлт хийх шаардлага гарсан нь нилээн төвөгтэй цаг авсан ажил болсон. FFT алгоритмын хэрэгжүүлэлт хэт урт байгаа тул source линкийг байршуулав.\footnote{\url{https://github.com/Tseku210/flutter-jeefo-pitch-detector/blob/master/ios/Classes/FFTPitchAnalyser/fft.c}}
+
+\begin{lstlisting}[language=Dart, caption=Давтамж тодорхойлох абстракт класс, frame=single]
+import 'dart:math';
+import 'jeefo_pitch_detector_platform_interface.dart';
+
+abstract class JeefoPitchDetector {
+  static Future<void> activate() async {
+    await JeefoPitchDetectorPlatform.instance.activate();
+  }
+
+  static Future<void> deactivate() async {
+    await JeefoPitchDetectorPlatform.instance.deactivate();
+  }
+
+  static Future<List<double>> getValues(double amplitudeThreshold) async {
+    return JeefoPitchDetectorPlatform.instance.getValues(amplitudeThreshold);
+  }
+
+  static String pitchToNoteName(double pitch) {
+    int noteNum = (12 * (log(pitch / 440) / ln2)).round() + 69;
+    if (noteNum < 0) return "Invalid note";
+    int octave = noteNum ~/ 12 - 1;
+    int noteIndex = noteNum % 12;
+    List<String> noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    return noteNames[noteIndex] + octave.toString();
+  }
+}
+
+\end{lstlisting}
+
+\begin{lstlisting}[language=Dart, caption=Java хэл дахь FFT хэрэгжүүлэлт, frame=single]
+/** JeefoPitchDetectorPlugin */
+public class JeefoPitchDetectorPlugin implements FlutterPlugin, MethodCallHandler, ActivityAware, PluginRegistry.RequestPermissionsResultListener {
+  /// The MethodChannel that will the communication between Flutter and native Android
+  ///
+  /// This local reference serves to register the plugin with the Flutter Engine and unregister it
+  /// when the Flutter Engine is detached from the Activity
+  private MethodChannel channel;
+  private static final String channel_name = "jeefo.pitch_detector";
+  private boolean is_library_loaded = false;
+
+  private static final int SAMPLE_RATE = 44000;
+  private static final int BUFFER_SIZE = 1024;
+  private static final int hop_size   = BUFFER_SIZE;
+  private static final int peak_count = 20;
+  private static float amplitudeThreshold = 0;
+  private double pitch     = 0;
+  private double amplitude = 0;
+  private boolean is_activated = false;
+
+  // AudioEngine
+  private Activity activity;
+  private AudioRecord audioRecord;
+  private short[] audioBuffer;
+
+  @Override
+  public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
+    channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), channel_name);
+    channel.setMethodCallHandler(this);
+  }
+
+  @Override
+  public void onMethodCall(@NonNull MethodCall call, @NonNull Result result) {
+    switch (call.method) {
+      case "activate":
+        activate();
+        result.success(null);
+        break;
+      case "deactivate":
+        deactivate();
+        result.success(null);
+        break;
+      case "get_values":
+        Number threshold = call.argument("amplitudeThreshold");
+        if (threshold != null) {
+          amplitudeThreshold = threshold.floatValue();
+        }
+        List<Double> values = Arrays.asList(pitch, amplitude);
+        result.success(values);
+        break;
+      default:
+        result.notImplemented();
+        break;
+    }
+  }
+
+
+  @Override
+  public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
+    channel.setMethodCallHandler(null);
+  }
+
+  private void activate_audio_engine() {
+    if (ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+      ActivityCompat.requestPermissions(activity, new String[]{Manifest.permission.RECORD_AUDIO}, 1);
+      return;
+    }
+    audioBuffer = new short[BUFFER_SIZE];
+
+    audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC, SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT, BUFFER_SIZE * 2);
+
+    if (audioRecord.getState() == AudioRecord.STATE_UNINITIALIZED) {
+      Log.e("JeefoPitchDetector", "Failed to initialize audio recorder");
+      return;
+    }
+
+    audioRecord.setPositionNotificationPeriod(BUFFER_SIZE);
+    audioRecord.setRecordPositionUpdateListener(new AudioRecord.OnRecordPositionUpdateListener() {
+      @Override
+      public void onMarkerReached(AudioRecord recorder) {
+      }
+
+      @Override
+      public void onPeriodicNotification(AudioRecord recorder) {
+        if (!is_activated) return;
+        audioRecord.read(audioBuffer, 0, BUFFER_SIZE);
+        float[] values = new float[3];
+        values[2] = amplitudeThreshold;
+        jpd_get_values_from_i16(audioBuffer, values);
+        pitch = values[0];
+        amplitude = values[1];
+      }
+    });
+    audioRecord.startRecording();
+  }
+
+  private void activate() {
+    if (!is_library_loaded) {
+      System.loadLibrary("jeefo-pitch-detector");
+      is_library_loaded = true;
+    }
+    jpd_init(hop_size, peak_count);
+    jpd_set_sample_rate(SAMPLE_RATE);
+    if (audioRecord == null) {
+      activate_audio_engine();
+    }
+    is_activated = true;
+  }
+
+  private void deactivate() {
+    if (audioRecord != null) {
+      audioRecord.stop();
+      audioRecord.release();
+      audioRecord = null;
+    }
+    jpd_destroy();
+    is_activated = false;
+  }
+
+  @Override
+  public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
+    activity = binding.getActivity();
+    binding.addRequestPermissionsResultListener(this);
+  }
+
+  @Override
+  public void onDetachedFromActivity() {
+    activity = null;
+  }
+
+  @Override
+  public void onReattachedToActivityForConfigChanges(@NonNull ActivityPluginBinding binding) {
+    activity = binding.getActivity();
+  }
+
+  @Override
+  public void onDetachedFromActivityForConfigChanges() {
+    activity = null;
+  }
+
+  @Override
+  public boolean onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+    if (requestCode == 1 && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+      activate_audio_engine(); // Re-run the audio engine code
+      return true;
+    }
+    return false;
+  }
+
+  private native void jpd_init(int hop_size, int peak_count);
+  private native void jpd_destroy();
+  private native void jpd_get_values_from_i16(short[] audioData, float[] values);
+  private native void jpd_set_sample_rate(int sr);
+}
+\end{lstlisting}
+
+Java хэл дээр бичсэн уг алгоритмын хэрэгжүүлэлт нь Android үйлдлийн систем дээр ажиллана гэж ойлгож болно.
+
+\pagebreak
+
+\section{Data Spider апп}
+Дадлагын хугацаанд хоёр дахь төслөөрөө монгол мөнгөн дэвсгэртийн дата цуглуулах аппликейшн хөгжүүлж хувиараа дэлгүүр ажлуулдаг иргэдэд тарааж дата цуглуулаад энэ 7 сарын сүүлээр эхэлсэн.
+
+Сурах ур чадвар: 
+\begin{itemize}
+    \item АWS хэрэглээнд суралцах
+    \item Flutter болон AWS-г холбож фүллстак апп хөгжүүлэх арга барилд суралцах
+    \item Цэвэрхэн цэгцтэй код бичиж сурах
+\end{itemize}
+
+Системийн шаардлага: 
+\begin{itemize}
+    \item Flutter ашигласан байх
+    \item АWS ашиглаж бак-энд хөгжүүлэлт хийгдсэн байх
+    \item Алдаагүй мэдээлэл хадгалж дамжуулдагг байх
+    \item Хэрэглэхэд ойлгомжтой, хурдан байх
+\end{itemize}
+
+\subsection{Flutter ашиглаж нүүр хэсгийг зурах}
+
+\begin{lstlisting}[language=Dart, caption=Data Spider нүүр хуудасны хэрэгжүүлэлт, frame=single]
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  // ойлгомжтой байх үүднээс хасав
+
+  @override
+  Widget build(BuildContext context) {
+    CameraModel _cameraProvider = context.watch<CameraModel>();
+    // _loginProvider = context.watch<LoginProvider>();
+    Future<void> initializeControllerFuture =
+        _cameraProvider.controller.initialize();
+
+    return Scaffold(
+      body: _cameraProvider.isCameraOn
+          ? FutureBuilder<void>(
+              future: initializeControllerFuture,
+              builder: (context, snapshot) {
+                if (!_cameraProvider.isInitialized) {
+                  // This means the _initializeControllerFuture hasn't been properly initialized yet
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.connectionState == ConnectionState.done) {
+                  // If the Future is complete, display the preview.
+                  print("camera on");
+                  return Camera(onImageTaken: onImageTaken);
+                } else {
+                  // Otherwise, display a loading indicator.
+                  return const Center(child: CircularProgressIndicator());
+                }
+              },
+            )
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          FilledButton(
+                            onPressed: () {
+                              showMyDialog(context);
+                            },
+                            style: ButtonStyle(
+                              backgroundColor: MaterialStateColor.resolveWith(
+                                  (states) => AppColors.red),
+                              side: MaterialStateProperty.all<BorderSide>(
+                                BorderSide(
+                                  color: AppColors.black.withOpacity(0.1),
+                                  width: 2,
+                                ),
+                              ),
+                              shape: MaterialStateProperty.all<
+                                  RoundedRectangleBorder>(
+                                RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10.0),
+                                ),
+                              ),
+                            ),
+                            child: Text(
+                              'Тайлбар харах',
+                              style: TextStyles.textLargeBold()
+                                  .copyWith(color: AppColors.white),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      cameraWidget(
+                        frontCamera,
+                        onCamera: () {
+                          if (!mounted) return;
+                          _cameraProvider.toggle();
+                          deleteImage(frontCamera.getImagePath);
+                          setState(() {
+                            frontCamera.setImagePath = null;
+                          });
+                        },
+                      ),
+                      cameraWidget(
+                        backCamera,
+                        onCamera: () {
+                          if (!mounted) return;
+                          _cameraProvider.toggle();
+                          deleteImage(backCamera.getImagePath);
+                          setState(() {
+                            backCamera.setImagePath = null;
+                          });
+                        },
+                      ),
+                      totalAmount("Нийт мөнгөн дүн", onChanged: (value) {
+                        totalAmountController.text = value;
+                      }),
+                      moneyTypeAndQuantityWidget(
+                        "Дэвсгэртийн тоо",
+                        onClick: _addMoneyWidget,
+                        onRemove: _removeMoneyWidget,
+                        moneyWidgets: moneyWidgets
+                            .map((moneyData) => moneyData.buildWidget())
+                            .toList(),
+                      ),
+                      sendButton(onSend: () async {
+                        Loader.show(context,
+                            progressIndicator: const CircularProgressIndicator(
+                              semanticsLabel: "Өгөгдлийг илгээж байна",
+                            ));
+                        await sendData();
+                        Loader.hide();
+                      }),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+
+  Widget cameraWidget(CameraData cameraData, {VoidCallback? onCamera}) {
+    return GestureDetector(
+      onTap: onCamera,
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Text(cameraData.getText, style: TextStyles.textLargeBold()),
+              cameraData.isMandatory
+                  ? Text("*",
+                      style: TextStyles.textLargeBold()
+                          .copyWith(color: AppColors.red))
+                  : Container(),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            height: cameraData.getImagePath == null ? 200 : 500,
+            decoration: BoxDecoration(
+              color: AppColors.black.withOpacity(0.03),
+            ),
+            child: cameraData.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : cameraData.getImagePath == null
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            SvgPicture.asset('assets/icons/camera.svg'),
+                            Text(
+                              'Энэд дарж зураг оруулна уу',
+                              style: TextStyles.textMedium()
+                                  .copyWith(color: AppColors.greyText),
+                            ),
+                          ],
+                        ),
+                      )
+                    : Image.file(File(cameraData.getImagePath!),
+                        fit: BoxFit.contain),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+}
+
+\end{lstlisting}
+
+\subsection{Логик хэрэгжүүлэлт}
+
+Энэд бид хэрэглэгчээс оруулсан мэдээллүүдийг json хэлбэрт оруулж AWS-ийн Api Gateway үйлчилгээний тусламжтайгаар DynamoDB болон S3 дээр өгөгдлүүдээ хадгална. DynamoDB дээр зургийн ID, хэрэглэгчийн ID болон нэмэлт мэдээллүүдийг хадгалж байгаа бол S3 дээр хэрэглэгчийн оруулсан мөнгөн дэвсгэртийн зургийг ID нэрээр нь хадгална. Зургаа нэрлэхдээ программчлалын байдлаар UUID ашиглан ID үүсгэснийг дээрх 2 үйлчилгээ дээр ашиглаж байна.
+
+\begin{lstlisting}[language=Dart, caption=Дата цуглуулалтын логик хэрэгжүүлэлт, frame=single]
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  // providers
+  // late CameraModel _cameraProvider;
+  // late LoginProvider _loginProvider;
+
+  var uuid = const Uuid();
+  bool _isLoaderVisible = false;
+
+  List<MoneyData> moneyWidgets = [];
+
+  CameraData frontCamera = CameraData(text: 'Нүүр хэсгийн зураг');
+  CameraData backCamera = CameraData(text: 'Арын зураг', isMandatory: false);
+
+  TextEditingController totalAmountController = TextEditingController();
+
+  Map<String, dynamic> data = {
+    'userId': '',
+    'username': '',
+    'frontImageId': '',
+    'backImageId': '',
+    'totalAmount': '',
+    'imageDesc': [],
+  };
+
+  bool populateData() {
+    LoginProvider loginProvider = context.read<LoginProvider>();
+    data['userId'] = loginProvider.userId;
+    data['username'] = loginProvider.username;
+    data['frontImageId'] = uuid.v4();
+    data['backImageId'] = uuid.v4();
+    data['totalAmount'] = totalAmountController.text;
+    data['imageDesc'] = extractImageDesc();
+
+    bool isOk = validateData();
+    return isOk ? true : false;
+  }
+
+  List<Map<String, dynamic>> extractImageDesc() {
+    List<Map<String, dynamic>> imageDesc = [];
+    for (var moneyWidget in moneyWidgets) {
+      imageDesc.add(moneyWidget.toJson());
+    }
+    return imageDesc;
+  }
+
+  Future<void> sendData() async {
+    //show loader
+    bool isOk = populateData();
+    if (!isOk) {
+      return;
+    }
+
+    bool isPublished = await context
+        .read<ApiProvider>()
+        .publish(data, frontCamera.getImagePath, backCamera.getImagePath);
+    if (isPublished) {
+      alertWidget('Амжилттай илгээлээ', 'Таньд баярлалаа');
+      reset();
+      return;
+    } else {
+      alertWidget('Ямар нэг алдаа гарлаа', 'Та дахин оруулаад илгээнэ үү');
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    moneyWidgets.add(MoneyData());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final CameraController cameraController =
+        context.read<CameraModel>().controller;
+
+    if (!cameraController.value.isInitialized) {
+      return;
+    }
+
+    if (state == AppLifecycleState.inactive) {
+      debugPrint("disposing in active");
+      cameraController.dispose();
+      // context.read<CameraModel>().dispose();
+    } else if (state == AppLifecycleState.resumed) {
+      // context.read<CameraModel>().initCamera();
+      print("resuming in resumed");
+      cameraController.initialize();
+    }
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+
+    totalAmountController.dispose();
+    Provider.of<CameraModel>(context).dispose();
+    Loader.hide();
+
+    for (var moneyData in moneyWidgets) {
+      moneyData.dispose();
+    }
+  }
+
+  void reset() {
+    setState(() {
+      frontCamera.reset();
+      backCamera.reset();
+      totalAmountController.text = '';
+      moneyWidgets = [];
+      moneyWidgets.add(MoneyData());
+    });
+  }
+
+  bool validateData() {
+    if (data['userId'].isEmpty ||
+        data['username'].isEmpty ||
+        data['frontImageId'].isEmpty ||
+        data['totalAmount'].isEmpty ||
+        data['imageDesc'].isEmpty ||
+        frontCamera.getImagePath == '') {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Дутуу бөглөсөн'),
+            content:
+                const Text('* тэмдэглэгээтэй талбаруудыг заавал бөглөнө үү'),
+            actions: [
+              TextButton(
+                child: const Text('Ойлголоо'),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+            ],
+          );
+        },
+      );
+      return false;
+    } else {
+      return true;
+    }
+  }
+
+  Future alertWidget(text, content) {
+    return showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text(text),
+            content: Text(content),
+            actions: [
+              TextButton(
+                child: const Text('Ойлголоо'),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+            ],
+          );
+        });
+  }
+
+  void _addMoneyWidget() async {
+    MoneyData moneyData = MoneyData();
+    setState(() {
+      moneyWidgets.add(moneyData);
+    });
+  }
+
+  void _removeMoneyWidget() {
+    if (moneyWidgets.length > 1) {
+      MoneyData moneyData = moneyWidgets.removeLast();
+      moneyData.dispose();
+      setState(() {});
+    }
+  }
+
+  Future<void> onImageTaken() async {
+    print("onImageTaken");
+    // if (frontCamera.imagePath == null) {
+    //   setState(() {
+    //     frontCamera.setIsLoading = true;
+    //   });
+    // } else {
+    //   setState(() {
+    //     backCamera.setIsLoading = true;
+    //   });
+    // }
+
+    CameraModel cameraProvider = context.read<CameraModel>();
+    String? imagePath = await cameraProvider.takeImage();
+    if (imagePath != null) {
+      if (frontCamera.imagePath != null) {
+        setState(() {
+          backCamera.setImagePath = imagePath;
+          backCamera.setIsLoading = false;
+        });
+      } else {
+        setState(() {
+          frontCamera.setImagePath = imagePath;
+          frontCamera.setIsLoading = false;
+        });
+      }
+    }
+  }
+
+  void deleteImage(String? path) async {
+    if (path == null) return;
+    File file = File(path);
+    if (await file.exists()) {
+      print("deleting file");
+      await file.delete();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // ойлгомжтой байх үүднээс хасав
+}
+\end{lstlisting}
+
+\subsection{AWS API Provider хэрэгжүүлэлт}
+
+Энэд бакендийн логик буюу AWS-ын API Gateway-тай харьцах логикийг хэрэгжүүлэв.
+
+
+\begin{lstlisting}[language=Dart, caption=Бакендийн хэрэгжүүлэлт, frame=single]
+class ApiProvider with ChangeNotifier {
+  String? userToken;
+  ApiProvider() {
+    getUserToken();
+  }
+  Future<void> getUserToken() async {
+    SharedPreferences.getInstance().then((prefs) {
+      userToken = prefs.getString('userToken');
+    });
+  }
+
+  Future<bool> publish(Map<String, dynamic> data, String? frontImagePath,
+      String? secondImagePath) async {
+    await getUserToken();
+    print('userToken: $userToken, $frontImagePath, $secondImagePath');
+    var url = Uri.parse('$apiGatewayUrl/cash-assist');
+    var response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': '$userToken',
+      },
+      body: jsonEncode(data),
+    );
+    print('response: ${response.statusCode} ${response.body}');
+    bool isPublishedToS3 = await publishPhotoToS3(
+        frontImageId: data['frontImageId'],
+        frontImagePath: frontImagePath!,
+        backImageId: data['backImageId'],
+        backImagePath: secondImagePath);
+    if (response.statusCode == 200 && isPublishedToS3) {
+      return true;
+    }
+    return false;
+  }
+
+  Future<bool> publishPhotoToS3({
+    required String frontImageId,
+    required String frontImagePath,
+    String? backImageId,
+    String? backImagePath,
+  }) async {
+    var frontImageFile = File(frontImagePath);
+    var frontImageBytes = await frontImageFile.readAsBytes();
+    var urlFront =
+        Uri.parse('$apiGatewayUrl/blob?key=cash-assist/$frontImageId');
+    var response = await http.put(
+      urlFront,
+      headers: {
+        'Content-Type': 'image/png',
+        'Authorization': '$userToken',
+      },
+      body: frontImageBytes,
+    );
+
+    print('response: ${response.statusCode} ${response.body}');
+
+    if (backImageId != null && backImagePath != null) {
+      var backImageFile = File(backImagePath);
+      var backImageBytes = await backImageFile.readAsBytes();
+      var urlBack =
+          Uri.parse('$apiGatewayUrl/blob?key=cash-assist/$backImageId');
+      await http.put(
+        urlBack,
+        headers: {
+          'Content-Type': 'image/png',
+          'Authorization': '$userToken',
+        },
+        body: backImageBytes,
+      );
+    }
+    if (response.statusCode == 200) {
+      return true;
+    }
+    return false;
+  }
+}
+
+\end{lstlisting}
